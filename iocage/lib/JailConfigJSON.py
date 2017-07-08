@@ -8,7 +8,7 @@ class JailConfigJSON:
     }
 
   def toJSON(self):
-    return json.dumps(self.data)
+    return json.dumps(self.data, sort_keys=True, indent=4)
 
   def save(self):
 
@@ -24,9 +24,9 @@ class JailConfigJSON:
       f.truncate()
 
   def read(self):
-    self.set(JailConfigJSON.read_data(self))
+    return self.clone(JailConfigJSON.read_data(self))
 
-  def __read_data(self):
+  def read_data(self):
     with open(JailConfigJSON.__get_config_json_path(self), "r") as conf:
       return json.load(conf)
 

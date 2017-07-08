@@ -5,14 +5,14 @@ import uuid
 
 class JailConfig(JailConfigJSON, JailConfigZFS):
 
-  def __init__(self, data = {}, dataset = None):
+  data = {}
+  dataset = None
 
-    self.data = [];
-    self.uuid = None
+  def __init__(self, data = {}):
 
     # the UUID is used in many other variables and needs to be set first
     try:
-      self.__set_uuid(data.uuid)
+      self._set_uuid(data.uuid)
     except:
       pass
 
@@ -22,25 +22,15 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
     except:
       self.legacy = False
 
-    # when a dataset is passed, try to read config.json
-    self.dataset = None
-    try:
-      self.dataset = dataset
-      JailConfigJSON.read(self)
-    except:
-      # ToDO maybe a iocage-legacy jail
-      pass
-
     self.clone(data);
 
 
   def clone(self, data):
+    for key in data:
+      self.__setattr__(key, data[key])
 
-    for key, value in data:
-      this[key] = data
 
-
-  def __set_name(self, value):
+  def _set_name(self, value):
 
     self.name = value
 
@@ -57,12 +47,51 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
     JailConfigZFS.save(self)
 
 
-  def __set_uuid(self, uuid):
+  def _set_uuid(self, uuid):
       self.uuid = UUID(uuid)
+
+
+  def _get_interfaces(self):
+    out = {}
+    nic_pairs = self.data["interfaces"].split(" ")
+    for nic_pair in nic_pairs:
+      jail_if, bridge_if = nic_pair.split(":")
+      out[jail_if] = bridge_if
+    return out
+
+  def _set_interfaces(self, value):
+
+    if not isinstance(value, str):
+      tmp = []
+      for jail_if in value:
+        bridge_if = value[jail_if]
+        tmp.append(f"{jail_if}:{bridge_if}")
+      value = " ".join(tmp)
+      del tmp
+
+    self.data["interfaces"] = value
+
+  def _default_mac_prefix():
+    return "02ff60"
 
   def __getattr__(self, key):
 
-    # look if the attribute already exists
+    # passthrough existing properties
+    try:
+      return self.__getattribute__(key)
+    except:
+      pass
+
+    # data with mappings
+    try:
+      get_method = self.__getattribute__(f"_get_{key}")
+      return get_method()
+    except:
+      if(key == "interfaces"):
+        raise
+      pass
+
+    # plain data attribute
     try:
       return self.data[key]
     except:
@@ -70,7 +99,7 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
 
     # then fall back to default
     try:
-      fallback_method = self[f"__default_{key}"]
+      fallback_method = self.__getattribute__(f"_default_{key}")
       return fallback_method()
     except:
       raise Exception(f"Variable {key} not found")
@@ -78,14 +107,20 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
 
   def __setattr__(self, key, value):
 
+    # passthrough existing properties
     try:
+      self.__getattribute__(key)
       object.__setattr__(self, key, value)
       return
     except:
       pass
-    
+
     try:
-      setter_method = self[f"__set_{key}"]
+      setter_method = self.__getattribute__(f"_set_{key}")
       setter_method(value)
     except:
       self.data[key] = value
+      pass
+
+  def toJSON(self):
+    return JailConfigJSON.toJSON(self)
