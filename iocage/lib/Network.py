@@ -1,5 +1,6 @@
-import subprocess as su
+import subprocess
 from hashlib import md5
+import re
 
 class Network:
 
@@ -7,6 +8,7 @@ class Network:
     self.jail = jail
     self.nic = nic
     self.mtu = mtu
+
 
   def setup(self):
     
@@ -19,51 +21,50 @@ class Network:
     })
 
     self.__set_nic(self.nic_local_name, {
-        "link": mac_a,
-        "description": self.nic_local_description
-      })
+      "link": self.mac_a,
+      "description": self.nic_local_description
+    })
 
     self.__set_nic(epair_b, {
-        "vnet": f"ioc-{self.jail.uuid}"
-      })
+      "vnet": self.jail.identifier
+    })
 
-    self.jexec(self._get_nic_command(epair_b, {
-        "link": mac_b
-      }))
+    self.jail.exec(self.__get_nic_command(epair_b, {
+      "link": self.mac_b
+    }))
+
 
   @property
   def nic_local_name(self):
-    return "{self.nic}:{self.jid}"
+    self.jail.require_jail_running()
+
+    return f"{self.nic}:{self.jail.jid}"
+
 
   @property
   def nic_local_description(self):
     return f"associated with jail: {self.jail.humanreadable_name}"
 
+
   def __set_nic(self, interface, properties):
-    for key in properties:
-      command = self.__get_nic_command(interface, properties)
-      return
-      
-      try:
-        out = subprocess.check_output(command)
-        out = out.decide("utf-8")
-      except su.CalledProcessError:
-        raise
+    command = self.__get_nic_command(interface, properties)
+    subprocess.check_output(command)
+
 
   def __get_nic_command(self, interface, properties):
-    out = ["ifconfig", interface]
+    command = ["/sbin/ifconfig", interface]
     for key in properties:
-      out.append(key)
-      out.append(properties[key])
-    print(out)
-    return " ".join(out)
+      command.append(key)
+      command.append(str(properties[key]))
+    print(command)
+    return (command)
 
 
-  def __create_vnet_iface():
+  def __create_vnet_iface(self):
     epair_a_cmd = ["ifconfig", "epair", "create"]
-    epair_a = su.Popen(epair_a_cmd, stdout=su.PIPE, shell=False).communicate()[0]
-    epair_a = epair_a.strip()
-    epair_b = re.sub(b"a$", b"b", epair_a)
+    epair_a = subprocess.Popen(epair_a_cmd, stdout=subprocess.PIPE, shell=False).communicate()[0]
+    epair_a = epair_a.decode("utf-8").strip()
+    epair_b = f"{epair_a[:-1]}b"
     return epair_a, epair_b
 
 
@@ -71,10 +72,10 @@ class Network:
     m = md5()
     m.update(self.jail.uuid.encode("utf-8"))
     m.update(self.nic.encode("utf-8"))
-    prefix = self.get("mac_prefix")
+    prefix = self.jail.config.mac_prefix
     return f"{prefix}{m.hexdigest()[0:12-len(prefix)]}"
 
 
   def __generate_mac_address_pair(self):
     self.mac_a = self.__generate_mac_bytes()
-    self.mac_b = hex(int(mac_a, 16) + 1)[2:].zfill(12)
+    self.mac_b = hex(int(self.mac_a, 16) + 1)[2:].zfill(12)

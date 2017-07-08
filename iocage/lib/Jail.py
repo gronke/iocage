@@ -20,10 +20,25 @@ class Jail:
     
 
   def start(self):
-    self._require_existing_jail()
-    self._require_stopped_jail()
-
+    self.require_jail_existing()
+    self.require_jail_stopped()
+    self._launch_jail()
     self._start_network()
+
+
+  def exec(self, command):
+
+    if isinstance(command, str):
+      command = [command]
+
+    stdout = subprocess.check_output(([
+      "/usr/sbin/jexec",
+      self.identifier
+    ] + command), shell=False)
+    return stdout
+
+
+  def _launch_jail(self):
 
 
   def _start_network(self):
@@ -34,14 +49,19 @@ class Jail:
       net.setup()
 
 
-  def _require_existing_jail(self):
+  def require_jail_existing(self):
     if not self.exists:
       raise Exception(f"Jail {self.humanreadable_name} does not exist")
 
 
-  def _require_stopped_jail(self):
-    if not self.running:
+  def require_jail_stopped(self):
+    if self.running:
       raise Exception(f"Jail {self.humanreadable_name} is already running")
+
+
+  def require_jail_running(self):
+    if not self.running:
+      raise Exception(f"Jail {self.humanreadable_name} is not running")
 
 
   def _get_humanreadable_name(self):
@@ -63,15 +83,25 @@ class Jail:
 
 
   def _get_running(self):
+    return self.jid != None
+
+
+  def _get_jid(self):
     try:
       child = subprocess.Popen([
         "/usr/sbin/jls",
         "-j",
-        f"ioc-{self.uuid}"
-      ], shell=False, stderr=None, stdout=None)
-      return True
+        self.identifier,
+        "-v",
+        "jid"
+      ], shell=False, stderr=subprocess.DEVNULL, stdout=subprocess.PIPE)
+      return child.stdout.read(1).decode("utf-8").strip()
     except:
-      return False
+      return None
+
+
+  def _get_identifier(self):
+    return f"ioc-{self.uuid}"
 
 
   def _get_exists(self):
@@ -99,7 +129,7 @@ class Jail:
 
 
   def _get_logfile_path(self):
-    return f"{self.root_dataset.mountpoint}/log/ioc-{self.uuid}.log"
+    return f"{self.root_dataset.mountpoint}/log/{self.identifier}.log"
 
 
   def __getattr__(self, key):
