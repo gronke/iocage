@@ -38,6 +38,7 @@ class Jail:
   def _launch_jail(self):
     command = ""
 
+
   def _start_network(self):
 
     nics = self.config.interfaces
@@ -82,7 +83,7 @@ class Jail:
 
 
   def _get_running(self):
-    return self.jid != None
+    return self._get_jid() != None
 
 
   def _get_jid(self):
@@ -94,9 +95,11 @@ class Jail:
         "-v",
         "jid"
       ], shell=False, stderr=subprocess.DEVNULL, stdout=subprocess.PIPE)
-      return child.stdout.read(1).decode("utf-8").strip()
+      jid = child.stdout.read(1).decode("utf-8").strip()
     except:
-      return None
+      pass
+
+    return jid if jid else None
 
 
   def _get_identifier(self):
