@@ -7,31 +7,14 @@ from iocage.lib.NetworkInterface import NetworkInterface
 class Network:
 
   def __init__(self, jail, nic="vnet0", mtu=1500):
+    self.vnet = True
     self.jail = jail
     self.nic = nic
     self.mtu = mtu
 
   def setup(self):
-    
-    jail_if, host_if = self.__create_vnet_iface()
-
-    self.__set_nic(epair_a, {
-      "mtu": self.mtu,
-      "name": self.nic_local_name
-    })
-
-    self.__set_nic(self.nic_local_name, {
-      "link": self.mac_a,
-      "description": self.nic_local_description
-    })
-
-    self.__set_nic(epair_b, {
-      "vnet": self.jail.identifier
-    })
-
-    self.jail.exec(self.__get_nic_command(epair_b, {
-      "link": self.mac_b
-    }))
+    if self.vnet:  
+      jail_if, host_if = self.__create_vnet_iface()
 
 
   @property
