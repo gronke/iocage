@@ -6,11 +6,11 @@ import uuid
 
 class JailConfig(JailConfigJSON, JailConfigZFS):
 
-  data = {}
-  dataset = None
-  special_properties = {}
-
   def __init__(self, data = {}):
+
+    object.__setattr__(self, 'data', {})
+    object.__setattr__(self, 'dataset', None)
+    object.__setattr__(self, 'special_properties', {})
 
     # the UUID is used in many other variables and needs to be set first
     try:

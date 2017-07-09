@@ -7,9 +7,15 @@ from iocage.lib.Command import Command
 
 class Jail:
 
-  def __init__(self, data = {}, root_dataset="zroot/iocage"):
+  def __init__(self, data = {}, root_dataset="zroot/iocage", zfs=None):
+    
     self.root_dataset = root_dataset
-    self.zfs = libzfs.ZFS(history=True, history_prefix="<iocage>")
+    
+    if isinstance(zfs, libzfs.ZFS):
+      self.zfs = zfs
+    else:
+      self.zfs = libzfs.ZFS(history=True, history_prefix="<iocage>")
+
     self.config = JailConfig(data=data)
     self.networks = []
 

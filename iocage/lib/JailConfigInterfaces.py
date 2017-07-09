@@ -48,7 +48,6 @@ class JailConfigInterfaces(dict):
 
     try:
       prop = dict.__getitem__(self, jail_if)
-      print('recycling', prop)
     except:
       prop = self.__empty_jail_if(jail_if)
 

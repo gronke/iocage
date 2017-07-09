@@ -39,7 +39,7 @@ class NetworkInterface:
     self.apply_addresses()
     
 
-  def apply_settings(self, settings):
+  def apply_settings(self):
     command = [self.ifconfig_command, self.name]
     for key in self.settings:
       command.append(key)
@@ -47,9 +47,10 @@ class NetworkInterface:
     self.exec(command)
 
     # update name when the interface was renamed
-    self.name = self.settings["rename"]
-    del self.settings["rename"]
-    self.rename = False
+    if self.rename:
+      self.name = self.settings["rename"]
+      del self.settings["rename"]
+      self.rename = False
 
 
   def apply_addresses(self):
