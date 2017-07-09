@@ -3,6 +3,7 @@ import subprocess
 
 from iocage.lib.JailConfig import JailConfig
 from iocage.lib.Network import Network
+from iocage.lib.Command import Command
 
 class Jail:
 
@@ -21,25 +22,21 @@ class Jail:
 
   def start(self):
     self.require_jail_existing()
-    self.require_jail_stopped()
-    self._launch_jail()
+    # self.require_jail_stopped()
+    # self._launch_jail()
     self._start_network()
 
 
   def exec(self, command):
-
-    if isinstance(command, str):
-      command = [command]
-
-    stdout = subprocess.check_output(([
+    command = [
       "/usr/sbin/jexec",
       self.identifier
-    ] + command), shell=False)
-    return stdout
+    ] + command
+    return Command.exec(self, command)
 
 
   def _launch_jail(self):
-
+    command = ""
 
   def _start_network(self):
 
@@ -47,6 +44,8 @@ class Jail:
     for nic in nics:
       net = Network(jail=self, nic=nics[nic])
       net.setup()
+
+    ipv4_addresses = self.config.ipv4_address
 
 
   def require_jail_existing(self):

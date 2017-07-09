@@ -1,5 +1,6 @@
 from iocage.lib.JailConfigJSON import JailConfigJSON
 from iocage.lib.JailConfigZFS import JailConfigZFS
+from iocage.lib.JailConfigInterfaces import JailConfigInterfaces
 
 import uuid
 
@@ -7,6 +8,7 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
 
   data = {}
   dataset = None
+  special_properties = {}
 
   def __init__(self, data = {}):
 
@@ -30,6 +32,10 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
       self.__setattr__(key, data[key])
 
 
+  def update_special_property(self, name):
+    self.data[name] = str(self.special_properties[name])
+
+
   def _set_name(self, value):
 
     self.name = value
@@ -51,28 +57,46 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
       self.uuid = UUID(uuid)
 
 
-  def _get_interfaces(self):
+  def __get_ip_addr(self, config_line):
+    
     out = {}
-    nic_pairs = self.data["interfaces"].split(" ")
-    for nic_pair in nic_pairs:
-      jail_if, bridge_if = nic_pair.split(":")
-      out[jail_if] = bridge_if
+
+    ip_addresses = config_line.split(" ")
+    for ip_address_string in ip_addresses:
+      
+      nic, address = ip_address_string.split("|", maxsplit=1)
+      
+      try:
+        out[nic]
+      except:
+        out[nic] = []
+        pass
+
+      out[nic].append(address)
+
     return out
 
+
+  def _get_ip4_addr(self):
+    return self.__get_ip_addr(self.data["ip4_addr"])
+    
+
+  def _get_ip6_addr(self):
+    return self.__get_ip_addr(self.data["ip6_addr"])
+
+
+  def _get_interfaces(self):
+    return self.special_properties["interfaces"]
+    
+
   def _set_interfaces(self, value):
+    self.special_properties["interfaces"] = JailConfigInterfaces(value, jail_config=self)
+    self.update_special_property("interfaces")
 
-    if not isinstance(value, str):
-      tmp = []
-      for jail_if in value:
-        bridge_if = value[jail_if]
-        tmp.append(f"{jail_if}:{bridge_if}")
-      value = " ".join(tmp)
-      del tmp
-
-    self.data["interfaces"] = value
 
   def _default_mac_prefix():
     return "02ff60"
+
 
   def __getattr__(self, key):
 
@@ -122,5 +146,5 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
       self.data[key] = value
       pass
 
-  def toJSON(self):
+  def __str__(self):
     return JailConfigJSON.toJSON(self)

@@ -2,6 +2,8 @@ import subprocess
 from hashlib import md5
 import re
 
+from iocage.lib.NetworkInterface import NetworkInterface
+
 class Network:
 
   def __init__(self, jail, nic="vnet0", mtu=1500):
@@ -9,11 +11,9 @@ class Network:
     self.nic = nic
     self.mtu = mtu
 
-
   def setup(self):
     
-    self.__generate_mac_address_pair()
-    epair_a, epair_b = self.__create_vnet_iface()
+    jail_if, host_if = self.__create_vnet_iface()
 
     self.__set_nic(epair_a, {
       "mtu": self.mtu,
@@ -43,29 +43,46 @@ class Network:
 
   @property
   def nic_local_description(self):
-    return f"associated with jail: {self.jail.humanreadable_name}"
-
-
-  def __set_nic(self, interface, properties):
-    command = self.__get_nic_command(interface, properties)
-    subprocess.check_output(command)
-
-
-  def __get_nic_command(self, interface, properties):
-    command = ["/sbin/ifconfig", interface]
-    for key in properties:
-      command.append(key)
-      command.append(str(properties[key]))
-    print(command)
-    return (command)
+    return f"associated with jail: {self.jail.humanreadable_name}"  
 
 
   def __create_vnet_iface(self):
+
+    # create new epair interface
     epair_a_cmd = ["ifconfig", "epair", "create"]
     epair_a = subprocess.Popen(epair_a_cmd, stdout=subprocess.PIPE, shell=False).communicate()[0]
     epair_a = epair_a.decode("utf-8").strip()
     epair_b = f"{epair_a[:-1]}b"
-    return epair_a, epair_b
+
+    mac_a, mac_b = self.__generate_mac_address_pair()
+
+    host_if = NetworkInterface(
+      name=epair_a,
+      mac=mac_a,
+      mtu=self.mtu,
+      description=self.nic_local_description,
+      rename=self.nic_local_name
+    )
+
+    # assign epair_b to jail
+    self.__assign_vnet_iface_to_jail(epair_b, self.jail.identifier)
+
+    jail_if = NetworkInterface(
+      name=epair_b,
+      mac=mac_b,
+      mtu=self.mtu,
+      rename=self.nic,
+      jail=self.jail
+    )
+
+    return jail_if, host_if
+
+
+  def __assign_vnet_iface_to_jail(self, nic, jail_name):
+    NetworkInterface(
+      name=nic,
+      vnet=jail_name
+    )
 
 
   def __generate_mac_bytes(self):
@@ -77,5 +94,6 @@ class Network:
 
 
   def __generate_mac_address_pair(self):
-    self.mac_a = self.__generate_mac_bytes()
-    self.mac_b = hex(int(self.mac_a, 16) + 1)[2:].zfill(12)
+    mac_a = self.__generate_mac_bytes()
+    mac_b = hex(int(self.mac_a, 16) + 1)[2:].zfill(12)
+    return mac_a, mac_b
