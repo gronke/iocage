@@ -99,7 +99,7 @@ class JailConfigAddresses(dict):
 
   def __str__(self):
     out = []
-    for jail_if in self:
-      for bridge_if in self[jail_if]:
-        out.append(f"{jail_if}:{bridge_if}")
-    return " ".join(out)
+    for nic in self:
+      for address in self[nic]:
+        out.append(f"{nic}|{address}")
+    return str(" ".join(out))

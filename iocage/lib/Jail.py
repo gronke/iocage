@@ -36,8 +36,9 @@ class Jail:
     self.require_jail_existing()
     self.require_jail_stopped()
     self.launch_jail()
-    self.start_network()
-    self.set_routes()
+    if self.config.vnet:
+      self.start_network()
+      self.set_routes()
     self.set_nameserver()
 
   def stop(self):
@@ -65,6 +66,15 @@ class Jail:
 
     if self.config.vnet:
       command.append('vnet')
+    else:
+      command += [
+        f"ip4.addr={self.config.ip4_addr}",
+        f"ip4.saddrsel={self.config.ip4_saddrsel}",
+        f"ip4={self.config.ip4}",
+        f"ip6.addr={self.config.ip6_addr}",
+        f"ip6.saddrsel={self.config.ip6_saddrsel}",
+        f"ip6={self.config.ip6}"
+      ]
 
     command += [
       f"name={self.identifier}",
@@ -120,9 +130,18 @@ class Jail:
       "persist"
     ]
 
-    subprocess.check_output(command, shell=False, stderr=subprocess.DEVNULL)
+    try:
+      output = subprocess.check_output(command, shell=False, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as exc:
+      print("Failed", exc.returncode, exc.output)
+      raise
+
 
   def start_network(self):
+
+    if not self.config.vnet:
+      # Not necessary without VNET
+      return
 
     nics = self.config.interfaces
     for nic in nics:
@@ -141,6 +160,7 @@ class Jail:
 
       net = Network(jail=self, nic=nic, ipv4_addresses=ipv4_addresses, ipv6_addresses=ipv6_addresses, bridges=bridges)
       net.setup()
+      self.networks.append(net)
 
   def set_nameserver(self):
     self.config.resolver.apply(self)
