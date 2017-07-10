@@ -66,7 +66,6 @@ class JailConfigResolver(list):
 
 
   def __setitem__(self, key, value, notify=True):
-    print("SETITEM")
     list.__setitem__(self, key, value)
     self.__notify(notify)
 
