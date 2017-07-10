@@ -6,14 +6,22 @@ from iocage.lib.NetworkInterface import NetworkInterface
 
 class Network:
 
-  def __init__(self, jail, nic="vnet0", mtu=1500):
+  def __init__(self, jail, nic="vnet0", ipv4_addresses=[], ipv6_addresses=[], mtu=1500, bridges=None):
     self.vnet = True
+    self.bridges = bridges
     self.jail = jail
     self.nic = nic
     self.mtu = mtu
+    self.ipv4_addresses = ipv4_addresses
+    self.ipv6_addresses = ipv6_addresses
+
 
   def setup(self):
-    if self.vnet:  
+    if self.vnet:
+
+      if not self.bridges or len(self.bridges) == 0:
+        raise Exception("VNET is enabled and requires setting a bridge")
+
       jail_if, host_if = self.__create_vnet_iface()
 
 
@@ -47,6 +55,20 @@ class Network:
       rename=self.nic_local_name
     )
 
+    # add host_if to bridges
+    for bridge in self.bridges:
+      NetworkInterface(
+        name=bridge,
+        addm=self.nic_local_name,
+        extra_settings=["up"]
+      )
+
+    # up host_if
+    NetworkInterface(
+      name=self.nic_local_name,
+      extra_settings=["up"]
+    )
+
     # assign epair_b to jail
     self.__assign_vnet_iface_to_jail(epair_b, self.jail.identifier)
 
@@ -55,7 +77,10 @@ class Network:
       mac=mac_b,
       mtu=self.mtu,
       rename=self.nic,
-      jail=self.jail
+      jail=self.jail,
+      extra_settings=["up"],
+      ipv4_addresses=self.ipv4_addresses,
+      ipv6_addresses=self.ipv6_addresses
     )
 
     return jail_if, host_if
@@ -78,5 +103,5 @@ class Network:
 
   def __generate_mac_address_pair(self):
     mac_a = self.__generate_mac_bytes()
-    mac_b = hex(int(self.mac_a, 16) + 1)[2:].zfill(12)
+    mac_b = hex(int(mac_a, 16) + 1)[2:].zfill(12)
     return mac_a, mac_b

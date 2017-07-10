@@ -4,18 +4,25 @@ import subprocess
 from iocage.lib.JailConfig import JailConfig
 from iocage.lib.Network import Network
 from iocage.lib.Command import Command
+from iocage.lib.Host import Host
 
 class Jail:
 
   def __init__(self, data = {}, root_dataset="zroot/iocage", zfs=None):
-    
-    self.root_dataset = root_dataset
-    
+
     if isinstance(zfs, libzfs.ZFS):
       self.zfs = zfs
     else:
       self.zfs = libzfs.ZFS(history=True, history_prefix="<iocage>")
 
+    if isinstance(root_dataset, libzfs.ZFSDataset):
+      self.root_dataset = root_dataset
+    elif isinstance(root_dataset, str):
+      self.root_dataset = self.zfs.get_dataset(root_dataset)
+    else:
+      raise Exception("root_dataset invalid")
+
+    self.host = Host()
     self.config = JailConfig(data=data)
     self.networks = []
 
@@ -24,13 +31,14 @@ class Jail:
       self.config.read()
     except:
       pass
-    
+
 
   def start(self):
     self.require_jail_existing()
-    # self.require_jail_stopped()
-    # self._launch_jail()
-    self._start_network()
+    self.require_jail_stopped()
+    self.launch_jail()
+    self.start_network()
+    self.set_routes()
 
 
   def exec(self, command):
@@ -41,19 +49,111 @@ class Jail:
     return Command.exec(self, command)
 
 
-  def _launch_jail(self):
-    command = ""
+  def launch_jail(self):
+
+    command = [ "jail", "-c" ]
+
+    if self.config.vnet:
+      command.append('vnet')
+
+    command += [
+      f"name={self.identifier}",
+      f"host.hostname={self.config.host_hostname}",
+      f"host.domainname={self.config.host_domainname}",
+      f"path={self.path}/root",
+      #f"securelevel={securelevel}",
+      f"host.hostuuid={self.uuid}",
+      f"devfs_ruleset={self.config.devfs_ruleset}",
+      f"enforce_statfs={self.config.enforce_statfs}",
+      f"children.max={self.config.children_max}",
+      f"allow.set_hostname={self.config.allow_set_hostname}",
+      f"allow.sysvipc={self.config.allow_sysvipc}"
+    ]
+
+    if self.host.userland_version > 10.3:
+      command += [
+        f"sysvmsg={self.config.sysvmsg}",
+        f"sysvsem={self.config.sysvsem}",
+        f"sysvshm={self.config.sysvshm}"
+      ]
+
+    command += [
+      f"allow.raw_sockets={self.config.allow_raw_sockets}",
+      f"allow.chflags={self.config.allow_chflags}",
+      f"allow.mount={self.config.allow_mount}",
+      f"allow.mount.devfs={self.config.allow_mount_devfs}",
+      f"allow.mount.nullfs={self.config.allow_mount_nullfs}",
+      f"allow.mount.procfs={self.config.allow_mount_procfs}",
+      f"allow.mount.zfs={self.config.allow_mount_zfs}",
+      f"allow.quotas={self.config.allow_quotas}",
+      f"allow.socket_af={self.config.allow_socket_af}",
+      f"exec.prestart={self.config.exec_prestart}",
+      f"exec.poststart={self.config.exec_poststart}",
+      f"exec.prestop={self.config.exec_prestop}",
+      f"exec.stop={self.config.exec_stop}",
+      f"exec.clean={self.config.exec_clean}",
+      f"exec.timeout={self.config.exec_timeout}",
+      f"stop.timeout={self.config.stop_timeout}",
+      f"mount.fstab={self.path}/fstab",
+      f"mount.devfs={self.config.mount_devfs}"
+    ]
+
+    if self.host.userland_version > 9.3:
+      command += [
+        f"mount.fdescfs={self.config.mount_fdescfs}",
+        f"allow.mount.tmpfs={self.config.allow_mount_tmpfs}"
+      ]
+
+    command += [
+      "allow.dying",
+      f"exec.consolelog={self.logfile_path}",
+      "persist"
+    ]
+
+    stdout = subprocess.check_output(command, shell=False, stderr=subprocess.STDOUT)
 
 
-  def _start_network(self):
+  def start_network(self):
 
     nics = self.config.interfaces
     for nic in nics:
-      net = Network(jail=self, nic=nics[nic])
+
+      bridges = list(self.config.interfaces[nic])
+
+      try:
+        ipv4_addresses = self.config.ip4_addr[nic]
+      except:
+        ipv4_addresses = []
+
+      try:
+        ipv6_addresses = self.config.ip6_addr[nic]
+      except:
+        ipv6_addresses = []
+
+      net = Network(jail=self, nic=nic, ipv4_addresses=ipv4_addresses, ipv6_addresses=ipv6_addresses, bridges=bridges)
       net.setup()
 
-    ipv4_addresses = self.config.ipv4_address
 
+  def set_routes(self):
+
+    if self.config.defaultrouter:
+      self._set_route(self.config.defaultrouter)
+
+    if self.config.defaultrouter6:
+      self._set_route(self.config.defaultrouter6, ipv6=True)
+
+
+  def _set_route(self, gateway, ipv6=False):
+
+    command = [
+      "/sbin/route",
+      "add"
+    ] + (["-6"] if ipv6 else []) + [
+      "default",
+      gateway
+    ]
+
+    self.exec(command)
 
   def require_jail_existing(self):
     if not self.exists:
@@ -71,6 +171,7 @@ class Jail:
 
 
   def _get_humanreadable_name(self):
+
     try:
       return self.config.name
     except:
@@ -94,18 +195,18 @@ class Jail:
 
   def _get_jid(self):
     try:
-      child = subprocess.Popen([
+      stdout = subprocess.check_output([
         "/usr/sbin/jls",
         "-j",
         self.identifier,
         "-v",
         "jid"
-      ], shell=False, stderr=subprocess.DEVNULL, stdout=subprocess.PIPE)
-      jid = child.stdout.read(1).decode("utf-8").strip()
+      ], shell=False, stderr=subprocess.DEVNULL)
+      jid = stdout.decode("utf-8").strip()
     except:
-      pass
+      jid = None
 
-    return jid if jid else None
+    return jid
 
 
   def _get_identifier(self):
@@ -125,7 +226,7 @@ class Jail:
 
 
   def _get_dataset_name(self):
-    return f"{self.root_dataset}/jails/{self.config.uuid}"
+    return f"{self.root_dataset.name}/jails/{self.config.uuid}"
 
 
   def _get_dataset(self):
@@ -137,7 +238,7 @@ class Jail:
 
 
   def _get_logfile_path(self):
-    return f"{self.root_dataset.mountpoint}/log/{self.identifier}.log"
+    return f"{self.root_dataset.mountpoint}/log/{self.identifier}-console.log"
 
 
   def __getattr__(self, key):

@@ -1,8 +1,9 @@
 from iocage.lib.JailConfigJSON import JailConfigJSON
 from iocage.lib.JailConfigZFS import JailConfigZFS
 from iocage.lib.JailConfigInterfaces import JailConfigInterfaces
+from iocage.lib.JailConfigAddresses import JailConfigAddresses
 
-import uuid
+from uuid import UUID
 
 class JailConfig(JailConfigJSON, JailConfigZFS):
 
@@ -43,7 +44,6 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
     try:
       self.host_hostname
     except:
-      print(f"Setting host_hostname as well to {value}")
       self.host_hostname = value
       pass
 
@@ -54,35 +54,31 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
 
 
   def _set_uuid(self, uuid):
-      self.uuid = UUID(uuid)
-
-
-  def __get_ip_addr(self, config_line):
-    
-    out = {}
-
-    ip_addresses = config_line.split(" ")
-    for ip_address_string in ip_addresses:
-      
-      nic, address = ip_address_string.split("|", maxsplit=1)
-      
-      try:
-        out[nic]
-      except:
-        out[nic] = []
-        pass
-
-      out[nic].append(address)
-
-    return out
+      object.__setattr__(self, 'uuid', str(UUID(uuid)))
 
 
   def _get_ip4_addr(self):
-    return self.__get_ip_addr(self.data["ip4_addr"])
+    try:
+      return self.special_properties["ip4_addr"]
+    except:
+      return None
     
+  
+  def _set_ip4_addr(self, value):
+    self.special_properties["ip4_addr"] = JailConfigAddresses(value, jail_config=self, property_name="ip4_addr")
+    self.update_special_property("ip4_addr")
 
+  
   def _get_ip6_addr(self):
-    return self.__get_ip_addr(self.data["ip6_addr"])
+    try:
+      return self.special_properties["ip6_addr"]
+    except:
+      return None
+
+
+  def _set_ip6_addr(self, value):
+    self.special_properties["ip6_addr"] = JailConfigAddresses(value, jail_config=self, property_name="ip6_addr")
+    self.update_special_property("ip6_addr")
 
 
   def _get_interfaces(self):
@@ -92,6 +88,37 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
   def _set_interfaces(self, value):
     self.special_properties["interfaces"] = JailConfigInterfaces(value, jail_config=self)
     self.update_special_property("interfaces")
+
+
+  def _get_defaultrouter(self):
+    value = self.data['defaultrouter']
+    return value if (value != "none" and value != None) else None
+
+
+  def _set_defaultrouter(self, value):
+    if value == None:
+      value = 'none'
+    self.data['defaultrouter'] = value
+
+
+  def _get_defaultrouter6(self):
+    value = self.data['defaultrouter6']
+    return value if (value != "none" and value != None) else None
+
+
+  def _set_defaultrouter6(self, value):
+    if value == None:
+      value = 'none'
+    self.data['defaultrouter6'] = value
+
+
+  def _get_vnet(self):
+    return self.data["vnet"] == "on"
+
+
+  def _set_vnet(self, value):
+    vnet_enabled = (value == "on") or (value == True)
+    self.data["vnet"] = "on" if vnet_enabled else "off"
 
 
   def _default_mac_prefix():
@@ -107,13 +134,16 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
       pass
 
     # data with mappings
+    get_method = None
     try:
       get_method = self.__getattribute__(f"_get_{key}")
-      return get_method()
     except:
       if(key == "interfaces"):
         raise
       pass
+
+    if get_method != None:
+      return get_method()
 
     # plain data attribute
     try:
@@ -139,12 +169,16 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
     except:
       pass
 
+    setter_method = None
     try:
       setter_method = self.__getattribute__(f"_set_{key}")
-      setter_method(value)
     except:
       self.data[key] = value
       pass
+
+    if setter_method != None:
+      return setter_method(value)
+
 
   def __str__(self):
     return JailConfigJSON.toJSON(self)

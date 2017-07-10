@@ -2,29 +2,33 @@ from iocage.lib.Command import Command
 
 class NetworkInterface:
 
-  ifconfig_command: "/sbin/ifconfig"
+  ifconfig_command = "/sbin/ifconfig"
 
-  def __init__(self, name="vnet0", ipv4=[], ipv6=[], mac=None, mtu="auto", description=None, rename=None, jail=None):
+  def __init__(self, name="vnet0", ipv4_addresses=[], ipv6_addresses=[], mac=None, mtu=None, description=None, rename=None, addm=None, vnet=None, jail=None, extra_settings=[], auto_apply=True):
 
     self.jail = jail
 
     self.name = name
-    self.ipv4 = ipv4
-    self.ipv6 = ipv6
+    self.ipv4_addresses = ipv4_addresses
+    self.ipv6_addresses = ipv6_addresses
 
+    self.extra_settings = extra_settings
     self.settings = {}
 
     if mac != None:
-      self.settings["link"] = self.mac
+      self.settings["link"] = mac
 
     if mtu != None:
-      self.settings["mtu"] = self.mtu
+      self.settings["mtu"] = str(mtu)
 
     if description != None:
-      self.settings["description"] = self.description
+      self.settings["description"] = f"\"{description}\""
 
     if vnet != None:
-      self.settings["vnet"] = self.vnet
+      self.settings["vnet"] = vnet
+
+    if addm != None:
+      self.settings["addm"] = addm
 
     # rename interface when applying settings next time
     if isinstance(rename, str):
@@ -32,6 +36,9 @@ class NetworkInterface:
       self.settings["name"] = rename
     else:
       self.rename = False
+
+    if auto_apply:
+      self.apply()
 
 
   def apply(self):
@@ -44,18 +51,22 @@ class NetworkInterface:
     for key in self.settings:
       command.append(key)
       command.append(self.settings[key])
+    
+    if self.extra_settings:
+      command += self.extra_settings
+
     self.exec(command)
 
     # update name when the interface was renamed
     if self.rename:
-      self.name = self.settings["rename"]
-      del self.settings["rename"]
+      self.name = self.settings["name"]
+      del self.settings["name"]
       self.rename = False
 
 
   def apply_addresses(self):
-    self.__apply_addresses(self.ipv4, ipv6=False)
-    self.__apply_addresses(self.ipv6, ipv6=True)
+    self.__apply_addresses(self.ipv4_addresses, ipv6=False)
+    self.__apply_addresses(self.ipv6_addresses, ipv6=True)
 
 
   def __apply_addresses(self, addresses, ipv6=False):
@@ -73,4 +84,4 @@ class NetworkInterface:
 
 
   def __is_jail(self):
-    return isinstance(self.jail, Jail)
+    return self.jail != None
