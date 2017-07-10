@@ -20,7 +20,7 @@ class Jail:
     elif isinstance(root_dataset, str):
       self.root_dataset = self.zfs.get_dataset(root_dataset)
     else:
-      raise Exception("root_dataset invalid")
+      raise Exception("root_dataset is invalid")
 
     self.host = Host()
     self.config = JailConfig(data=data)
@@ -32,14 +32,18 @@ class Jail:
     except:
       pass
 
-
   def start(self):
     self.require_jail_existing()
     self.require_jail_stopped()
     self.launch_jail()
     self.start_network()
     self.set_routes()
+    self.set_nameserver()
 
+  def stop(self):
+    self.require_jail_existing()
+    self.require_jail_running()
+    self.destroy_jail()
 
   def exec(self, command):
     command = [
@@ -48,6 +52,12 @@ class Jail:
     ] + command
     return Command.exec(self, command)
 
+  def destroy_jail(self):
+
+    command = [ "jail", "-r" ]
+    command.append(self.identifier)
+
+    subprocess.check_output(command, shell=False, stderr=subprocess.DEVNULL)
 
   def launch_jail(self):
 
@@ -110,8 +120,7 @@ class Jail:
       "persist"
     ]
 
-    stdout = subprocess.check_output(command, shell=False, stderr=subprocess.STDOUT)
-
+    subprocess.check_output(command, shell=False, stderr=subprocess.DEVNULL)
 
   def start_network(self):
 
@@ -133,6 +142,8 @@ class Jail:
       net = Network(jail=self, nic=nic, ipv4_addresses=ipv4_addresses, ipv6_addresses=ipv6_addresses, bridges=bridges)
       net.setup()
 
+  def set_nameserver(self):
+    self.config.resolver.apply(self)
 
   def set_routes(self):
 
@@ -141,7 +152,6 @@ class Jail:
 
     if self.config.defaultrouter6:
       self._set_route(self.config.defaultrouter6, ipv6=True)
-
 
   def _set_route(self, gateway, ipv6=False):
 
@@ -159,16 +169,13 @@ class Jail:
     if not self.exists:
       raise Exception(f"Jail {self.humanreadable_name} does not exist")
 
-
   def require_jail_stopped(self):
     if self.running:
       raise Exception(f"Jail {self.humanreadable_name} is already running")
 
-
   def require_jail_running(self):
     if not self.running:
       raise Exception(f"Jail {self.humanreadable_name} is not running")
-
 
   def _get_humanreadable_name(self):
 
@@ -188,10 +195,8 @@ class Jail:
   def _get_stopped(self):
     return self.running != True;
 
-
   def _get_running(self):
     return self._get_jid() != None
-
 
   def _get_jid(self):
     try:
@@ -208,10 +213,8 @@ class Jail:
 
     return jid
 
-
   def _get_identifier(self):
     return f"ioc-{self.uuid}"
-
 
   def _get_exists(self):
     try:
@@ -220,26 +223,20 @@ class Jail:
     except:
       return False
 
-
   def _get_uuid(self):
     return self.config.uuid
-
 
   def _get_dataset_name(self):
     return f"{self.root_dataset.name}/jails/{self.config.uuid}"
 
-
   def _get_dataset(self):
     return self.zfs.get_dataset(self._get_dataset_name())
-
 
   def _get_path(self):
     return self.dataset.mountpoint
 
-
   def _get_logfile_path(self):
     return f"{self.root_dataset.mountpoint}/log/{self.identifier}-console.log"
-
 
   def __getattr__(self, key):
     try:

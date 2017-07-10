@@ -7,6 +7,11 @@ from iocage.lib.NetworkInterface import NetworkInterface
 class Network:
 
   def __init__(self, jail, nic="vnet0", ipv4_addresses=[], ipv6_addresses=[], mtu=1500, bridges=None):
+
+    if bridges != None:
+      if not isinstance(bridges, list):
+        raise Exception("Invalid parameter bridges: None or List of Strings expected")
+
     self.vnet = True
     self.bridges = bridges
     self.jail = jail

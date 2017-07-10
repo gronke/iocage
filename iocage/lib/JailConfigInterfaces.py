@@ -72,10 +72,10 @@ class JailConfigInterfaces(dict):
 
 
   def __notify(self):
-      try:
-        self.jail_config.update_special_property(self.property_name)
-      except:
-        pass
+    try:
+      self.jail_config.update_special_property(self.property_name)
+    except:
+      pass
 
 
   def __empty_prop(self, key):

@@ -2,6 +2,7 @@ from iocage.lib.JailConfigJSON import JailConfigJSON
 from iocage.lib.JailConfigZFS import JailConfigZFS
 from iocage.lib.JailConfigInterfaces import JailConfigInterfaces
 from iocage.lib.JailConfigAddresses import JailConfigAddresses
+from iocage.lib.JailConfigResolver import JailConfigResolver
 
 from uuid import UUID
 
@@ -33,7 +34,11 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
       self.__setattr__(key, data[key])
 
 
-  def update_special_property(self, name):
+  def update_special_property(self, name, new_property_handler=None):
+
+    if new_property_handler != None:
+      self.special_properties[name] = new_property_handler
+
     self.data[name] = str(self.special_properties[name])
 
 
@@ -125,6 +130,37 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
     return "02ff60"
 
 
+  def _get_resolver(self):
+    return self.__create_special_property_resolver()
+
+
+  def _set_resolver(self, value):
+  
+    if isinstance(value, str):
+      self.data["resolver"] = value
+      resolver = self.resolver
+    else:
+      resolver = JailConfigResolver(jail_config=self)
+      resolver.update(value, notify=True)
+
+
+  def __create_special_property_resolver(self):
+    
+    create_new = False
+    try:
+      self.special_properties["resolver"]
+    except:
+      create_new = True
+      pass
+
+    if create_new:
+      resolver = JailConfigResolver(jail_config=self)
+      resolver.update(notify=False)
+      self.special_properties["resolver"] = resolver
+
+    return self.special_properties["resolver"]
+
+
   def __getattr__(self, key):
 
     # passthrough existing properties
@@ -138,11 +174,9 @@ class JailConfig(JailConfigJSON, JailConfigZFS):
     try:
       get_method = self.__getattribute__(f"_get_{key}")
     except:
-      if(key == "interfaces"):
-        raise
       pass
 
-    if get_method != None:
+    if get_method:
       return get_method()
 
     # plain data attribute
