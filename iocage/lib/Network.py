@@ -105,8 +105,8 @@ class Network:
             rename=self.nic,
             jail=self.jail,
             extra_settings=["up"],
-            ipv4_addresses=self.ipv4_addresses,
-            ipv6_addresses=self.ipv6_addresses,
+            #ipv4_addresses=self.ipv4_addresses,
+            #ipv6_addresses=self.ipv6_addresses,
             logger=self.logger
         )
 

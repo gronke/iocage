@@ -9,6 +9,7 @@ import iocage.lib.ZFSBasejailStorage
 import iocage.lib.ZFSShareStorage
 import iocage.lib.NullFSBasejailStorage
 import iocage.lib.StandaloneJailStorage
+import iocage.lib.RCConf
 
 import subprocess
 import uuid
@@ -67,6 +68,7 @@ class Jail:
 
         self.config.fstab.read_file()
         self.config.fstab.save_with_basedirs()
+        self.write_rcconf()
         self.launch_jail()
 
         if self.config.vnet:
@@ -216,6 +218,66 @@ class Jail:
             stderr=subprocess.DEVNULL
         )
 
+    def write_rcconf(self):
+
+        rcconf_file = f"{self.path}/root/etc/rc.conf"
+        rcconf = iocage.lib.RCConf.RCConf(rcconf_file, logger=self.logger)
+        nic_alias_count = {}
+
+        enable_rtsold = False
+        enable_bpf = False
+
+        ip4_addr = self.config.ip4_addr
+        for nic in ip4_addr.keys():
+
+            ip_version_first_occasion = True
+
+            if nic not in nic_alias_count.keys():
+                nic_alias_count[nic] = 0
+
+            for address in ip4_addr[nic]:
+                if ip_version_first_occasion is True:
+                    key = f"ifconfig_{nic}"
+                    ip_version_first_occasion = False
+                else:
+                    key = f"ifconfig_{nic}_alias{nic_alias_count[nic]}"
+                    nic_alias_count[nic] += 1
+
+                if address.lower() == "dhcp":
+                    rcconf[key] = f"DHCP"
+                    enable_bpf = True
+                else:
+                    rcconf[key] = f"inet {address}"
+
+        ip6_addr = self.config.ip6_addr
+        for nic in ip6_addr.keys():
+
+            ip_version_first_occasion = True
+
+            if nic not in nic_alias_count.keys():
+                nic_alias_count[nic] = 0
+
+            for address in ip6_addr[nic]:
+                if ip_version_first_occasion is True:
+                    key = f"ifconfig_{nic}_ipv6"
+                    ip_version_first_occasion = False
+                else:
+                    key = f"ifconfig_{nic}_alias{nic_alias_count[nic]}"
+                    nic_aliases[nic] += 1
+
+                rcconf[key] = f"inet6 {address}"
+
+                if "accept_rtadv" in address:
+                    enable_rtsold = True
+
+        rcconf["rtsold_enable"] = enable_rtsold
+
+        if enable_bpf:
+            self.config.devfs_ruleset = "5"
+
+        rcconf.save()
+
+
     def launch_jail(self):
 
         command = ["jail", "-c"]
@@ -223,22 +285,22 @@ class Jail:
         if self.config.vnet:
             command.append('vnet')
         else:
+            pass
+            # if self.config.ip4_addr is not None:
+            #     ip4_addr = self.config.ip4_addr
+            #     command += [
+            #         f"ip4.addr={ip4_addr}",
+            #         f"ip4.saddrsel={self.config.ip4_saddrsel}",
+            #         f"ip4={self.config.ip4}",
+            #     ]
 
-            if self.config.ip4_addr is not None:
-                ip4_addr = self.config.ip4_addr
-                command += [
-                    f"ip4.addr={ip4_addr}",
-                    f"ip4.saddrsel={self.config.ip4_saddrsel}",
-                    f"ip4={self.config.ip4}",
-                ]
-
-            if self.config.ip6_addr is not None:
-                ip6_addr = self.config.ip6_addr
-                command += [
-                    f"ip6.addr={ip6_addr}",
-                    f"ip6.saddrsel={self.config.ip6_saddrsel}",
-                    f"ip6={self.config.ip6}",
-                ]
+            # if self.config.ip6_addr is not None:
+            #     ip6_addr = self.config.ip6_addr
+            #     command += [
+            #         f"ip6.addr={ip6_addr}",
+            #         f"ip6.saddrsel={self.config.ip6_saddrsel}",
+            #         f"ip6={self.config.ip6}",
+            #     ]
 
         command += [
             f"name={self.identifier}",
@@ -313,7 +375,7 @@ class Jail:
 
     def start_vimage_network(self):
 
-        self.logger.log("Starting VNET/VIMAGE", jail=self)
+        self.logger.verbose("Starting VNET/VIMAGE", jail=self)
 
         nics = self.config.interfaces
         for nic in nics:
